@@ -154,7 +154,6 @@ async function scrapeAll() {
     const { area, ...rest } = escort;
     const cleanData = Object.fromEntries(
       Object.entries({ ...rest, area: area || "", services: escort.services || [] })
-        .filter(([_, v]) => v !== undefined)
     );
     cleanData.createdAt = serverTimestamp();
     await addDoc(collection(db, "nai-raha"), cleanData);
