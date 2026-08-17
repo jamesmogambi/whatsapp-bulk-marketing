@@ -19,6 +19,22 @@ const BATCH_SIZE = 100;
 const MESSAGE_DELAY_MS = 8000; // 8 seconds between messages
 const BATCH_DELAY_MS = 60000; // 60 seconds between batches
 
+const MESSAGE_TEMPLATES: Record<string, string> = {
+  "kenya-desires": `Are you an independent provider in Kenya? 🇰🇪
+
+Get more visibility and grow your earnings with **KenyaDesires**.
+
+✨ Create your professional profile
+📸 Showcase your photos and services
+📍 Reach clients in your area
+🚀 Boost your listing for more visibility
+💰 Get started and grow your earning potential
+
+Join KenyaDesires today and put your profile in front of more potential clients.
+
+👉 Create your profile now.`,
+};
+
 interface Escort {
   id: string;
   name: string;
@@ -28,7 +44,7 @@ interface Escort {
   services: string[];
 }
 
-function parseArgs(): { message: string; collection?: string; maxBatches?: number; dryRun?: boolean } {
+function parseArgs(): { message: string; collection?: string; maxBatches?: number; dryRun?: boolean; template?: string } {
   const args = process.argv.slice(2);
   const params: Record<string, string> = {};
   
@@ -39,21 +55,37 @@ function parseArgs(): { message: string; collection?: string; maxBatches?: numbe
       if (value && !value.startsWith("--")) {
         params[key] = value;
         i++;
+      } else if (!value) {
+        params[key] = "true";
       }
     }
   }
   
-  if (!params.message) {
+  if (!params.message && !params.template) {
     console.error("Usage: npx tsx scripts/bulk-whatsapp-sender.ts --message \"Your message here\" [--collection nai-raha] [--maxBatches 5] [--dryRun]");
+    console.error("   or: npx tsx scripts/bulk-whatsapp-sender.ts --template <template-name> [--collection nai-raha] [--maxBatches 5] [--dryRun]");
     console.error("\nPlaceholders: {{name}}, {{city}}, {{area}}, {{phone}}");
+    console.error("\nAvailable templates: " + Object.keys(MESSAGE_TEMPLATES).join(", "));
     process.exit(1);
   }
   
+  let message = params.message || "";
+  if (params.template) {
+    const template = MESSAGE_TEMPLATES[params.template];
+    if (!template) {
+      console.error(`Unknown template: ${params.template}`);
+      console.error("Available templates: " + Object.keys(MESSAGE_TEMPLATES).join(", "));
+      process.exit(1);
+    }
+    message = template;
+  }
+  
   return {
-    message: params.message,
+    message,
     collection: params.collection || "nai-raha",
     maxBatches: params.maxBatches ? parseInt(params.maxBatches, 10) : undefined,
     dryRun: params.dryRun === "true",
+    template: params.template,
   };
 }
 
@@ -96,23 +128,27 @@ function personalizeMessage(template: string, escort: Escort): string {
 }
 
 async function logResult(escortId: string, phone: string, success: boolean, error?: string, msgId?: number) {
-  await addDoc(collection(db, "whatsapp-logs"), {
+  const data: Record<string, unknown> = {
     escortId,
     phone,
     success,
-    error,
-    msgId,
     sentAt: serverTimestamp(),
-  });
+  };
+  if (error) data.error = error;
+  if (msgId !== undefined) data.msgId = msgId;
+  await addDoc(collection(db, "whatsapp-logs"), data);
 }
 
 async function runBulkSender() {
-  const { message, collection, maxBatches, dryRun } = parseArgs();
+  const { message, collection, maxBatches, dryRun, template } = parseArgs();
   
   console.log("=".repeat(60));
   console.log("WhatsApp Bulk Sender");
   console.log("=".repeat(60));
   console.log(`Collection:         ${collection}`);
+  if (template) {
+    console.log(`Template:           ${template}`);
+  }
   console.log(`Message template: ${message.substring(0, 100)}${message.length > 100 ? "..." : ""}`);
   console.log(`Max batches: ${maxBatches || "All"}`);
   console.log(`Dry run: ${dryRun ? "Yes" : "No"}`);
